@@ -3,6 +3,7 @@ import { FastifyInstance } from 'fastify'
 import { randomUUID } from 'node:crypto'
 import { ZodError, z } from 'zod'
 import { knex } from '../database'
+import { checkSessionIdExists } from '../middlewares/check-session-id-exists'
 
 interface CreateUserBody {
   success: boolean
@@ -14,12 +15,20 @@ interface CreateUserBody {
 }
 
 export async function usersRoutes(app: FastifyInstance) {
-  app.get('/', async (request) => {
-    const { sessionId } = request.cookies
-    const users = await knex('users').where('session_id', sessionId).select('*')
+  app.get(
+    '/',
+    {
+      preHandler: [checkSessionIdExists],
+    },
+    async (request) => {
+      const { sessionId } = request.cookies
+      const users = await knex('users')
+        .where('session_id', sessionId)
+        .select('*')
 
-    return users
-  })
+      return users
+    },
+  )
 
   app.post('/', async (request, reply) => {
     const createUserBodySchema = z.object({
