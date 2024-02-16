@@ -53,7 +53,7 @@ export async function mealsRoutes(app: FastifyInstance) {
         return reply.status(404).send({ error: 'Meal not found' })
       }
 
-      return meal
+      return reply.send(meal)
     },
   )
 
@@ -90,12 +90,10 @@ export async function mealsRoutes(app: FastifyInstance) {
       const { sessionId } = request.cookies
 
       const createMealBodySchema = z.object({
-        name: z
-          .string({
-            required_error: 'Name is required',
-            invalid_type_error: 'Name must be a string',
-          })
-          .min(1),
+        name: z.string({
+          required_error: 'Name is required',
+          invalid_type_error: 'Name must be a string',
+        }),
         description: z.string({
           required_error: 'Description is required',
           invalid_type_error: 'Description must be a string',
@@ -179,6 +177,56 @@ export async function mealsRoutes(app: FastifyInstance) {
       })
 
       return reply.status(204).send()
+    },
+  )
+
+  app.get(
+    '/metrics',
+    {
+      preHandler: [checkSessionIdExists],
+    },
+    async (_, reply) => {
+      const totalMeals = await knex('meals')
+
+      const totalMealsOnDiet = await knex('meals')
+        .where('is_on_diet', true)
+        .count('is_on_diet', {
+          as: 'totalMealsOnDiet',
+        })
+        .first()
+
+      const totalMealsOffDiet = await knex('meals')
+        .where('is_on_diet', false)
+        .count('is_on_diet', {
+          as: 'totalMealsOffDiet',
+        })
+        .first()
+
+      const { bestOnDietSequence } = totalMeals.reduce(
+        (acc, meal) => {
+          if (meal.is_on_diet) {
+            acc.currentSequence += 1
+          } else {
+            acc.currentSequence = 0
+          }
+
+          if (acc.currentSequence > acc.bestOnDietSequence) {
+            acc.bestOnDietSequence = acc.currentSequence
+          }
+
+          return acc
+        },
+        { bestOnDietSequence: 0, currentSequence: 0 },
+      )
+
+      return reply.status(200).send({
+        metrics: {
+          totalMeals: totalMeals?.length,
+          totalMealsOnDiet: totalMealsOnDiet?.totalMealsOnDiet,
+          totalMealsOffDiet: totalMealsOffDiet?.totalMealsOffDiet,
+          bestOnDietSequence,
+        },
+      })
     },
   )
 }
